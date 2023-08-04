@@ -1,0 +1,449 @@
+<!-- Made by Meterel -->
+<!-- https://github.com/Meterel/cubes-bg-webgl -->
+
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Cubes WebGL</title>
+
+        <style>
+            body{
+                margin: 0px;
+                overflow: clip;
+                background: black;
+
+                color: white;
+                font-family: Arial, Helvetica, sans-serif;
+            }
+
+            canvas{
+                touch-action: none;
+            }
+
+            button{
+                border-radius: 8px;
+                padding: 5px;
+                -webkit-backdrop-filter: blur(8px);
+                backdrop-filter: blur(8px);
+                background: rgba(255,255,255,0.1);
+                border: none;
+                outline: none;
+                color: inherit;
+            }
+
+            @keyframes init_fadeout{
+                0%{
+                    opacity: 1;
+                }
+                80%{
+                    opacity: 1;
+                }
+                100%{
+                    opacity: 0;
+                }
+            }
+
+            #open_settings{
+                position: fixed;
+                top: 0px;
+                left: 0px;
+
+                border-radius: 0px;
+                border-bottom-right-radius: 8px;
+                opacity: 0;
+
+                transition: opacity 250ms;
+                animation: init_fadeout 3s;
+            }
+
+            #open_settings:hover{
+                opacity: 1;
+            }
+
+            #settings{
+                position: fixed;
+                top: 0px;
+                left: 0px;
+                right: 0px;
+                bottom: 0px;
+                padding-top: 50px;
+                padding-left: 50px;
+                padding-bottom: 70px;
+                overflow: auto;
+
+                background: rgba(0,0,0,0.2);
+                -webkit-backdrop-filter: blur(8px);
+                backdrop-filter: blur(8px);
+            }
+
+            #settings>p{
+                margin-bottom: 0px;
+            }
+
+            input[type="range"]{
+                width: 300px;
+            }
+
+            #reset{
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+            }
+        </style>
+    </head>
+
+    <body>
+        <canvas></canvas>
+
+        <div id="settings" style="display: none;">
+            <p>Cubes</p>
+            <input type="range" id="count" min="1" max="200" step="1">
+
+            <p>Sensitivity</p>
+            <input type="range" id="sensitivity" min="0" max="50" step="1">
+
+            <br>
+
+            <label for="bloom">Bloom (broken)</label>
+            <input type="checkbox" name="bloom" id="bloom">
+
+            <button id="reset">Reset</button>
+            <a href="https://github.com/Meterel/cubes-bg-webgl" style="position: fixed;bottom: 8px;left: 8px;color: gray;"><small>Made by Meterel</small></a>
+        </div>
+
+        <button id="open_settings">Settings</button>
+    </body>
+
+    <script type="module">
+        "use strict";
+
+        //initialization
+        const canvas=document.querySelector("canvas");
+        const gl=canvas.getContext("webgl2");
+
+        gl.clearColor(0,0,0,1);
+        gl.enable(gl.DEPTH_TEST);
+        gl.enableVertexAttribArray(0);
+        gl.enableVertexAttribArray(1);
+
+
+        //loads geometry into buffer
+        let instance_count=75;
+        const geometry=new Float32Array(JSON.parse(await (await fetch("geometry")).text()));
+        const polygon_count=geometry.length/3;
+        const geometry_buffer=gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer);
+        gl.bufferData(gl.ARRAY_BUFFER,geometry,gl.STATIC_DRAW);
+
+
+        //shaders
+        const vertex_shader=gl.createShader(gl.VERTEX_SHADER);
+        gl.shaderSource(vertex_shader,`
+            attribute vec3 position;
+            attribute float seed;
+
+            uniform float time;
+            uniform float aspect;
+            uniform vec2 mouse_position;
+
+            varying float gradient;
+
+            mat4 rotationMatrix(vec3 axis, float angle)
+            {
+                axis = normalize(axis);
+                float s = sin(angle);
+                float c = cos(angle);
+                float oc = 1.0 - c;
+                
+                return mat4(oc * axis.x * axis.x + c,           oc * axis.x * axis.y - axis.z * s,  oc * axis.z * axis.x + axis.y * s,  0.0,
+                            oc * axis.x * axis.y + axis.z * s,  oc * axis.y * axis.y + c,           oc * axis.y * axis.z - axis.x * s,  0.0,
+                            oc * axis.z * axis.x - axis.y * s,  oc * axis.y * axis.z + axis.x * s,  oc * axis.z * axis.z + c,           0.0,
+                            0.0,                                0.0,                                0.0,                                1.0);
+            }
+
+            float rand(vec2 co){
+                return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+            }
+
+            void main(){
+                gradient=normalize(position).y;
+
+                float size=seed*.75+.25;
+                float max_x=aspect+0.2;
+
+                gl_Position=
+                    (vec4(position/10.*size,1.)*rotationMatrix(vec3(rand(vec2(seed,7284.17237218)),rand(vec2(seed,5834.378284)),rand(vec2(seed,8492.43784339))),(rand(vec2(seed,8787.82874896))*.75+.25)*time)+
+                    vec4(mod((mouse_position.x-time)*size+rand(vec2(seed,6472.736458))*max_x*2.,max_x*2.)-max_x,mod(rand(vec2(seed,2783.272649))*2.4-mouse_position.y*size,2.4)-1.2,0.,0.)
+                    )/vec4(aspect,1.,1.,1.);
+            }
+        `);
+        gl.compileShader(vertex_shader);
+
+        const fragment_shader=gl.createShader(gl.FRAGMENT_SHADER);
+        gl.shaderSource(fragment_shader,`
+            precision lowp float;
+
+            uniform highp float time; //must be highp or error
+
+            varying float gradient;
+
+            vec3 hsv2rgb(vec3 c) {
+                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+            }
+
+            void main(){
+                gl_FragColor=vec4(hsv2rgb(vec3((gradient+time)/12.,1.,1.)),1.);
+            }
+        `);
+        gl.compileShader(fragment_shader);
+
+        const shader_program=gl.createProgram();
+        gl.attachShader(shader_program,vertex_shader);
+        gl.attachShader(shader_program,fragment_shader);
+        gl.linkProgram(shader_program);
+        gl.useProgram(shader_program);
+
+
+        //sets attributes
+        const position_attribute=gl.getAttribLocation(shader_program,"position");
+
+        const seeds_buffer=gl.createBuffer();
+        const seed_attribute=gl.getAttribLocation(shader_program,"seed");
+        function make_seeds(){
+            const seeds=new Float32Array(instance_count);
+            for(let i=0;i<instance_count;i++) seeds[i]=Math.random();
+            gl.bindBuffer(gl.ARRAY_BUFFER,seeds_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,seeds,gl.STATIC_DRAW);
+        }
+        make_seeds();
+        gl.vertexAttribPointer(seed_attribute,1,gl.FLOAT,false,0,0);
+        gl.vertexAttribDivisor(seed_attribute,1);
+
+
+        //post processing
+        const post={
+            enabled:false,
+
+            framebuffer:gl.createFramebuffer(),
+            texture:gl.createTexture(),
+            buffer:gl.createBuffer(),
+            vshader:gl.createShader(gl.VERTEX_SHADER),
+            fshader:gl.createShader(gl.FRAGMENT_SHADER),
+            program:gl.createProgram(),
+        }
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER,post.framebuffer);
+        gl.bindTexture(gl.TEXTURE_2D,post.texture);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,post.texture,0);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER,post.buffer);
+        gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([
+            -1,1,
+            1,-1,
+            -1,-1,
+
+            -1,1,
+            1,1,
+            1,-1
+        ]),gl.STATIC_DRAW);
+
+        gl.shaderSource(post.vshader,`
+            attribute vec2 position;
+
+            void main(){
+                gl_Position=vec4(position,0.,1.);
+            }
+        `);
+        gl.compileShader(post.vshader);
+
+        gl.shaderSource(post.fshader,`
+            precision lowp float;
+
+            uniform sampler2D txt;
+            uniform vec2 resolution;
+
+            
+            const float PI=radians(180.);
+
+            void main(){
+                vec2 uv=gl_FragCoord.xy/resolution;
+                float aspect=resolution.x/resolution.y;
+
+                for(float x=-1.;x<=1.;x+=.5){
+                    for(float y=-1.;y<=1.;y+=.5){
+                        float len=length(vec2(x,y));
+                        if(len<=1.) gl_FragColor+=texture2D(txt,uv+vec2(x/aspect,y)*.2,length(resolution)/aspect/200.)*(cos(len*PI)+1.)/2.;
+                    }
+                }
+
+                gl_FragColor=gl_FragColor/gl_FragColor.w+texture2D(txt,uv);
+                //gl_FragColor=texture2D(txt,uv,resolution.y/150.);
+            }
+        `);
+        gl.compileShader(post.fshader);
+
+        gl.attachShader(post.program,post.vshader);
+        gl.attachShader(post.program,post.fshader);
+        gl.linkProgram(post.program);
+        gl.useProgram(post.program);
+
+        post.position=gl.getAttribLocation(post.program,"position");
+
+        post.resolution=gl.getUniformLocation(post.program,"resolution");
+
+        gl.uniform1i(gl.getUniformLocation(post.program,"txt"),post.texture);
+
+
+        //rendering and interactivity
+        const uniforms={
+            aspect:gl.getUniformLocation(shader_program,"aspect"),
+            time:gl.getUniformLocation(shader_program,"time"),
+            mouse_position:gl.getUniformLocation(shader_program,"mouse_position"),
+        }
+
+        let max_screen_size;
+        onresize=()=>{
+            canvas.width=window.innerWidth;
+            canvas.height=window.innerHeight;
+
+            gl.useProgram(shader_program);
+            gl.uniform1f(uniforms.aspect,canvas.width/canvas.height);
+            gl.viewport(0,0,canvas.width,canvas.height);
+
+            gl.useProgram(post.program);
+            gl.uniform2fv(post.resolution,[canvas.width,canvas.height]);
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+
+            max_screen_size=Math.max(canvas.width,canvas.height);
+        }
+        onresize();
+
+        const mouse={
+            position:[0,0],
+            movement:[0,0],
+
+            sensitivity:5,
+        }
+
+        addEventListener("mousemove",(e)=>{
+            mouse.movement[0]+=e.movementX;
+            mouse.movement[1]+=e.movementY;
+        },{passive:true});
+
+        const last_touch=[0,0];
+        function touchmove(e){
+            if(e.type==="touchmove"){
+                mouse.movement[0]+=e.touches[0].clientX-last_touch[0];
+                mouse.movement[1]+=e.touches[0].clientY-last_touch[1];
+            }
+            last_touch[0]=e.touches[0].clientX;
+            last_touch[1]=e.touches[0].clientY;
+        }
+
+        addEventListener("touchstart",touchmove,{passive:true});
+        addEventListener("touchmove",touchmove,{passive:true});
+
+        let then=0;
+        function process(now){
+            requestAnimationFrame(process);
+            if(then===now) return;
+            const delta=(now-then)/1000;
+            then=now;
+
+
+            gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer,gl.STATIC_DRAW);
+            gl.useProgram(shader_program);
+            gl.vertexAttribPointer(position_attribute,3,gl.FLOAT,false,0,0);
+            gl.bindFramebuffer(gl.FRAMEBUFFER,post.enabled ? post.framebuffer : null);
+
+            mouse.movement[0]*=Math.max(1-delta,0);
+            mouse.movement[1]*=Math.max(1-delta,0);
+            mouse.position[0]+=mouse.movement[0]*delta/max_screen_size*mouse.sensitivity;
+            mouse.position[1]+=mouse.movement[1]*delta/max_screen_size*mouse.sensitivity;
+
+            gl.uniform1f(uniforms.time,now/1000);
+            gl.uniform2fv(uniforms.mouse_position,mouse.position);
+
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+            gl.drawArraysInstanced(gl.TRIANGLES,0,polygon_count,instance_count);
+
+
+            if(!post.enabled) return;
+            
+            gl.bindBuffer(gl.ARRAY_BUFFER,post.buffer,gl.STATIC_DRAW);
+            gl.useProgram(post.program);
+            gl.vertexAttribPointer(post.position,2,gl.FLOAT,false,0,0);
+            gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+            
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.drawArrays(gl.TRIANGLES,0,6);
+        }
+        requestAnimationFrame(process);
+        //setInterval(() => {process(performance.now());},100);
+
+
+        //ui
+        const ui={
+            open_settings:document.getElementById("open_settings"),
+            settings:document.getElementById("settings"),
+
+            bloom:document.getElementById("bloom"),
+            count:document.getElementById("count"),
+            sensitivity:document.getElementById("sensitivity"),
+            reset:document.getElementById("reset"),
+        }
+
+        ui.open_settings.addEventListener("click",()=>{
+            ui.settings.style.display=ui.settings.style.display ? "" : "none";
+        });
+
+        ui.bloom.addEventListener("change",(e)=>{
+            post.enabled=Number(e.target.checked);
+            document.cookie="bloom="+post.enabled+";max-age=31536000";
+        });
+
+        ui.count.addEventListener("input",(e)=>{
+            instance_count=e.target.value;
+            make_seeds();
+            e.target.previousElementSibling.textContent="Cubes: "+instance_count;
+            document.cookie="count="+instance_count+";max-age=31536000";
+        });
+        
+        ui.sensitivity.addEventListener("input",(e)=>{
+            mouse.sensitivity=e.target.value;
+            e.target.previousElementSibling.textContent="Sensitivity: "+mouse.sensitivity;
+            document.cookie="sens="+mouse.sensitivity+";max-age=31536000";
+        });
+
+        ui.reset.addEventListener("click",()=>{
+            for(const x of document.cookie.split(";")){
+                const i=x.indexOf("=")+1;
+                document.cookie=(i ? x.substring(0,i) : x)+";max-age=0";
+            }
+
+            location.reload();
+        });
+
+        function get_cookie(key){
+            if(!key) return;
+            const start=document.cookie.indexOf(key+"=");
+            if(start===-1) return;
+            const end=document.cookie.indexOf(";",start);
+            return document.cookie.substring(start+key.length+1,end===-1 ? undefined : end);
+        }
+
+        ui.bloom.checked=Number(get_cookie("bloom")??post.enabled);
+        ui.bloom.dispatchEvent(new Event("change"));
+        ui.count.value=get_cookie("count")??instance_count;
+        ui.count.dispatchEvent(new Event("input"));
+        ui.sensitivity.value=get_cookie("sens")??mouse.sensitivity;
+        ui.sensitivity.dispatchEvent(new Event("input"));
+    </script>
+</html>
