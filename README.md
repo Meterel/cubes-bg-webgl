@@ -1,4 +1,4 @@
-# cubes-bg-webgl
+# [cubes-bg-webgl](https://meterel.github.io/cubes-bg-webgl/)
 
 A small remake of [cubes-bg](https://github.com/Meterel/cubes-bg) using WebGL without using any external libraries
 
