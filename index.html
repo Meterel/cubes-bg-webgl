@@ -125,6 +125,7 @@
 
         gl.clearColor(0,0,0,1);
         gl.enable(gl.DEPTH_TEST);
+        gl.enable(gl.CULL_FACE);
         gl.enableVertexAttribArray(0);
         gl.enableVertexAttribArray(1);
 
@@ -245,12 +246,12 @@
 
         gl.bindBuffer(gl.ARRAY_BUFFER,post.buffer);
         gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([
-            -1,1,
             1,-1,
+            -1,1,
             -1,-1,
 
-            -1,1,
             1,1,
+            -1,1,
             1,-1
         ]),gl.STATIC_DRAW);
 
@@ -406,44 +407,32 @@
 
         ui.bloom.addEventListener("change",(e)=>{
             post.enabled=Number(e.target.checked);
-            document.cookie="bloom="+post.enabled+";max-age=31536000";
+            localStorage.bloom=post.enabled;
         });
 
         ui.count.addEventListener("input",(e)=>{
             instance_count=e.target.value;
             make_seeds();
             e.target.previousElementSibling.textContent="Cubes: "+instance_count;
-            document.cookie="count="+instance_count+";max-age=31536000";
+            localStorage.count=instance_count;
         });
         
         ui.sensitivity.addEventListener("input",(e)=>{
             mouse.sensitivity=e.target.value;
             e.target.previousElementSibling.textContent="Sensitivity: "+mouse.sensitivity;
-            document.cookie="sens="+mouse.sensitivity+";max-age=31536000";
+            localStorage.sens=mouse.sensitivity;
         });
 
         ui.reset.addEventListener("click",()=>{
-            for(const x of document.cookie.split(";")){
-                const i=x.indexOf("=")+1;
-                document.cookie=(i ? x.substring(0,i) : x)+";max-age=0";
-            }
-
+            localStorage.clear();
             location.reload();
         });
 
-        function get_cookie(key){
-            if(!key) return;
-            const start=document.cookie.indexOf(key+"=");
-            if(start===-1) return;
-            const end=document.cookie.indexOf(";",start);
-            return document.cookie.substring(start+key.length+1,end===-1 ? undefined : end);
-        }
-
-        ui.bloom.checked=Number(get_cookie("bloom")??post.enabled);
+        ui.bloom.checked=Number(localStorage.bloom??post.enabled);
         ui.bloom.dispatchEvent(new Event("change"));
-        ui.count.value=get_cookie("count")??instance_count;
+        ui.count.value=localStorage.count??instance_count;
         ui.count.dispatchEvent(new Event("input"));
-        ui.sensitivity.value=get_cookie("sens")??mouse.sensitivity;
+        ui.sensitivity.value=localStorage.sens??mouse.sensitivity;
         ui.sensitivity.dispatchEvent(new Event("input"));
     </script>
 </html>
