@@ -142,14 +142,12 @@
         //shaders
         const vertex_shader=gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vertex_shader,`
-            precision lowp float;
-
             attribute vec3 position;
             attribute float size;
             attribute vec4 rotation;
             attribute vec2 instance_position;
 
-            uniform highp float time; //must be highp or error
+            uniform float time;
             uniform float aspect;
             uniform vec2 mouse_position;
 
