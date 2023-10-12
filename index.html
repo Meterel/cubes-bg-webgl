@@ -109,7 +109,7 @@
 
             <br>
 
-            <label for="bloom">Bloom (broken)</label>
+            <label for="bloom">Bloom</label>
             <input type="checkbox" name="bloom" id="bloom">
 
             <button id="reset">Reset</button>
@@ -178,7 +178,7 @@
                 float max_x_2=max_x*2.;
                 gl_Position.x+=mod((mouse_position.x-time)*size+instance_position.x*max_x_2,max_x_2)-max_x;
                 gl_Position.y+=mod(instance_position.y*2.4-mouse_position.y*size,2.4)-1.2;
-                gl_Position.z=(gl_Position.z-size)/2.;
+                gl_Position.z=(gl_Position.z-size*30.)/60.;
 
                 //adjust to aspect ratio
                 gl_Position.x/=aspect;
@@ -216,7 +216,6 @@
         //sets attributes and loads geometry
         const geometry=new Float32Array(await (await fetch("geometry")).json());
         for(let i=0;i<geometry.length;i++) geometry[i]/=10;
-        const polygon_count=geometry.length/3;
         const geometry_buffer=gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer);
         gl.bufferData(gl.ARRAY_BUFFER,geometry,gl.STATIC_DRAW);
@@ -259,16 +258,12 @@
         gl.vertexAttribDivisor(instance_position_attribute,1);
 
 
-        //post processing
+        //post pass one | original framebuffer at full resolution
         const post={
-            enabled:false,
+            enabled:true,
 
             framebuffer:gl.createFramebuffer(),
             texture:gl.createTexture(),
-            buffer:gl.createBuffer(),
-            vshader:gl.createShader(gl.VERTEX_SHADER),
-            fshader:gl.createShader(gl.FRAGMENT_SHADER),
-            program:gl.createProgram(),
         }
 
         gl.bindFramebuffer(gl.FRAMEBUFFER,post.framebuffer);
@@ -278,47 +273,57 @@
         gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
         gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,post.texture,0);
 
-        gl.shaderSource(post.vshader,`
+
+        //post pass two | gaussian blur on x axis
+        const post2={
+            framebuffer:gl.createFramebuffer(),
+            texture:gl.createTexture(),
+            buffer:gl.createBuffer(),
+            vshader:gl.createShader(gl.VERTEX_SHADER),
+            fshader:gl.createShader(gl.FRAGMENT_SHADER),
+            program:gl.createProgram(),
+        }
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER,post2.framebuffer);
+        gl.bindTexture(gl.TEXTURE_2D,post2.texture);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR_MIPMAP_LINEAR);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,post2.texture,0);
+
+        gl.shaderSource(post2.vshader,`
             attribute vec2 position;
 
             void main(){
                 gl_Position=vec4(position,0.,1.);
             }
         `);
-        gl.compileShader(post.vshader);
+        gl.compileShader(post2.vshader);
 
-        gl.shaderSource(post.fshader,`
+        gl.shaderSource(post2.fshader,`
             precision lowp float;
 
             uniform sampler2D txt;
             uniform vec2 resolution;
-
             
             const float PI=radians(180.);
 
             void main(){
                 vec2 uv=gl_FragCoord.xy/resolution;
-                float aspect=resolution.x/resolution.y;
+                float px=1./resolution.x;
 
-                for(float x=-1.;x<=1.;x+=.5){
-                    for(float y=-1.;y<=1.;y+=.5){
-                        float len=length(vec2(x,y));
-                        if(len<=1.) gl_FragColor+=texture2D(txt,uv+vec2(x/aspect,y)*.2,length(resolution)/aspect/200.)*(cos(len*PI)+1.)/2.;
-                    }
-                }
-
-                gl_FragColor=gl_FragColor/gl_FragColor.w+texture2D(txt,uv);
-                //gl_FragColor=texture2D(txt,uv,resolution.y/150.);
+                for(float x=-3.;x<=3.;x++) gl_FragColor+=texture2D(txt,uv+vec2(x*px,0.))*(cos(x/4.*PI)+1.)/2.;
+                gl_FragColor/=gl_FragColor.w;
             }
         `);
-        gl.compileShader(post.fshader);
+        gl.compileShader(post2.fshader);
 
-        gl.attachShader(post.program,post.vshader);
-        gl.attachShader(post.program,post.fshader);
-        gl.linkProgram(post.program);
-        gl.useProgram(post.program);
+        gl.attachShader(post2.program,post2.vshader);
+        gl.attachShader(post2.program,post2.fshader);
+        gl.linkProgram(post2.program);
+        gl.useProgram(post2.program);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER,post.buffer);
+        gl.bindBuffer(gl.ARRAY_BUFFER,post2.buffer);
         gl.bufferData(gl.ARRAY_BUFFER,new Float32Array([
             1,-1,
             -1,1,
@@ -328,11 +333,58 @@
             -1,1,
             1,-1
         ]),gl.STATIC_DRAW);
-        post.position=gl.getAttribLocation(post.program,"position");
+        post2.position=gl.getAttribLocation(post2.program,"position");
 
-        post.resolution=gl.getUniformLocation(post.program,"resolution");
+        post2.resolution=gl.getUniformLocation(post2.program,"resolution");
 
-        gl.uniform1i(gl.getUniformLocation(post.program,"txt"),post.texture);
+
+        //post pass three | gaussian blur on y axis and add the original image
+        const post3={
+            vshader:gl.createShader(gl.VERTEX_SHADER),
+            fshader:gl.createShader(gl.FRAGMENT_SHADER),
+            program:gl.createProgram(),
+        }
+
+        gl.shaderSource(post3.vshader,`
+            attribute vec2 position;
+
+            void main(){
+                gl_Position=vec4(position,0.,1.);
+            }
+        `);
+        gl.compileShader(post3.vshader);
+
+        gl.shaderSource(post3.fshader,`
+            precision lowp float;
+
+            uniform sampler2D txt;
+            uniform sampler2D original_txt;
+            uniform vec2 resolution;
+
+            const float PI=radians(180.);
+
+            void main(){
+                vec2 uv=gl_FragCoord.xy/resolution;
+                float px=50./resolution.y;
+
+                for(float y=-3.;y<=3.;y++) gl_FragColor+=texture2D(txt,uv+vec2(0.,y*px))*(cos(y/4.*PI)+1.)/2.;
+                gl_FragColor/=gl_FragColor.w;
+
+                gl_FragColor+=texture2D(original_txt,uv);
+            }
+        `);
+        gl.compileShader(post3.fshader);
+
+        gl.attachShader(post3.program,post3.vshader);
+        gl.attachShader(post3.program,post3.fshader);
+        gl.linkProgram(post3.program);
+        gl.useProgram(post3.program);
+
+        post3.resolution=gl.getUniformLocation(post3.program,"resolution");
+        gl.uniform1i(gl.getUniformLocation(post3.program,"original_txt"),1);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D,post.texture);
+        gl.activeTexture(gl.TEXTURE0);
 
 
         //rendering and interactivity
@@ -346,14 +398,21 @@
         onresize=()=>{
             canvas.width=window.innerWidth;
             canvas.height=window.innerHeight;
+            gl.viewport(0,0,canvas.width,canvas.height);
 
             gl.useProgram(shader_program);
             gl.uniform1f(uniforms.aspect,canvas.width/canvas.height);
-            gl.viewport(0,0,canvas.width,canvas.height);
 
-            gl.useProgram(post.program);
-            gl.uniform2fv(post.resolution,[canvas.width,canvas.height]);
+            gl.bindTexture(gl.TEXTURE_2D,post.texture);
             gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+
+            gl.useProgram(post2.program);
+            gl.uniform2fv(post2.resolution,[canvas.width/50,canvas.height/50]);
+            gl.bindTexture(gl.TEXTURE_2D,post2.texture);
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width/50,canvas.height/50,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+            
+            gl.useProgram(post3.program);
+            gl.uniform2fv(post3.resolution,[canvas.width,canvas.height]);
 
             max_screen_size=Math.max(canvas.width,canvas.height);
         }
@@ -406,21 +465,31 @@
             gl.uniform2fv(uniforms.mouse_position,mouse.position);
 
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            gl.drawArraysInstanced(gl.TRIANGLES,0,polygon_count,instance_count);
+            gl.drawArraysInstanced(gl.TRIANGLES,0,geometry.length/3,instance_count);
 
 
             if(!post.enabled) return;
             
-            gl.bindBuffer(gl.ARRAY_BUFFER,post.buffer,gl.STATIC_DRAW);
-            gl.useProgram(post.program);
-            gl.vertexAttribPointer(post.position,2,gl.FLOAT,false,0,0);
-            gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+            gl.bindBuffer(gl.ARRAY_BUFFER,post2.buffer,gl.STATIC_DRAW);
+            gl.vertexAttribPointer(post2.position,2,gl.FLOAT,false,0,0);
+
             
+            gl.useProgram(post2.program);
+            gl.bindFramebuffer(gl.FRAMEBUFFER,post2.framebuffer);
+            gl.bindTexture(gl.TEXTURE_2D,post.texture);
+            
+            gl.generateMipmap(gl.TEXTURE_2D);
+            gl.drawArrays(gl.TRIANGLES,0,6);
+
+
+            gl.useProgram(post3.program);
+            gl.bindFramebuffer(gl.FRAMEBUFFER,null);
+            gl.bindTexture(gl.TEXTURE_2D,post2.texture);
+
             gl.generateMipmap(gl.TEXTURE_2D);
             gl.drawArrays(gl.TRIANGLES,0,6);
         }
         requestAnimationFrame(process);
-        //setInterval(() => {process(performance.now());},100);
 
 
         //ui
