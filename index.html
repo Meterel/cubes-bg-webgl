@@ -83,13 +83,7 @@
             }
 
             input[type="range"]{
-                width: 300px;
-            }
-
-            #reset{
-                position: fixed;
-                bottom: 30px;
-                right: 30px;
+                width: calc(100% - 50px);
             }
         </style>
     </head>
@@ -99,20 +93,27 @@
 
         <div id="settings" style="display: none;">
             <p>Cubes</p>
-            <input type="range" id="count" min="1" max="5000" step="1">
+            <input type="range" id="count" min="0" max="1000" step="1">
 
-            <p>Size exponent</p>
-            <input type="range" id="size_exponent" min="1" max="50" step="1">
+            <p>Points</p>
+            <input type="range" id="points_count" min="0" max="10000" step="1">
 
             <p>Sensitivity</p>
-            <input type="range" id="sensitivity" min="0" max="50" step="1">
+            <input type="range" id="sensitivity" min="0" max="100" step="1">
 
             <br>
 
             <label for="bloom">Bloom</label>
             <input type="checkbox" name="bloom" id="bloom">
 
-            <button id="reset">Reset</button>
+            <div style="position: fixed;bottom: 30px;right: 30px;display: flex;gap: 8px;">
+                <button onclick="document.fullscreenElement ? document.exitFullscreen() : document.body.requestFullscreen()">Toggle fullscreen</button>
+                <button onclick="
+                    localStorage.clear();
+                    location.reload();
+                ">Reset</button>
+            </div>
+
             <a href="https://github.com/Meterel/cubes-bg-webgl" style="position: fixed;bottom: 8px;left: 8px;color: gray;"><small>Made by Meterel</small></a>
         </div>
 
@@ -124,28 +125,84 @@
 
         //initialization
         const canvas=document.querySelector("canvas");
-        const gl=canvas.getContext("webgl2");
+        const gl=canvas.getContext("webgl2",{preserveDrawingBuffer:true});
 
         gl.clearColor(0,0,0,1);
         gl.enable(gl.DEPTH_TEST);
         gl.enable(gl.CULL_FACE);
+        gl.hint(gl.GENERATE_MIPMAP_HINT,gl.NICEST);
+
         gl.enableVertexAttribArray(0);
         gl.enableVertexAttribArray(1);
         gl.enableVertexAttribArray(2);
         gl.enableVertexAttribArray(3);
+        gl.enableVertexAttribArray(4);
 
 
-        let instance_count=1000;
-        let size_exponent=20;
+        let instance_count=75;
 
 
-        //shaders
+        //points
+        const points={
+            count:500,
+
+            data_buffer:gl.createBuffer(),
+            vshader:gl.createShader(gl.VERTEX_SHADER),
+            fshader:gl.createShader(gl.FRAGMENT_SHADER),
+            program:gl.createProgram(),
+        }
+
+        gl.shaderSource(points.vshader,`
+            //position, total speed and movement speed
+            attribute vec4 data;
+
+            uniform float time;
+            uniform vec2 mouse_position;
+
+            void main(){
+                gl_PointSize=1.;
+
+                gl_Position=vec4(data.xy,0.,1.);
+                gl_Position.x=mod(gl_Position.x-(time*data.w-mouse_position.x)*data.z,2.)-1.;
+                gl_Position.y=mod(gl_Position.y-mouse_position.y*data.z,2.)-1.;
+            }
+        `);
+        gl.compileShader(points.vshader);
+
+        gl.shaderSource(points.fshader,`
+            precision lowp float;
+
+            uniform highp float time; //must be highp or error
+
+            vec3 hsv2rgb(vec3 c) {
+                vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+                vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+                return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+            }
+
+            void main(){
+                gl_FragColor=vec4(hsv2rgb(vec3(time/12.,1.,1.)),1.);
+            }
+        `);
+        gl.compileShader(points.fshader);
+
+        gl.attachShader(points.program,points.vshader);
+        gl.attachShader(points.program,points.fshader);
+        gl.linkProgram(points.program);
+        gl.useProgram(points.program);
+
+        points.data=gl.getAttribLocation(points.program,"data");
+        points.time=gl.getUniformLocation(points.program,"time");
+        points.mouse_position=gl.getUniformLocation(points.program,"mouse_position");
+
+        //shaders for cubes
         const vertex_shader=gl.createShader(gl.VERTEX_SHADER);
         gl.shaderSource(vertex_shader,`
             attribute vec3 position;
             attribute float size;
             attribute vec4 rotation;
             attribute vec2 instance_position;
+            attribute float speed;
 
             uniform float time;
             uniform float aspect;
@@ -176,7 +233,7 @@
                 //position instance
                 float max_x=aspect+0.2;
                 float max_x_2=max_x*2.;
-                gl_Position.x+=mod((mouse_position.x-time)*size+instance_position.x*max_x_2,max_x_2)-max_x;
+                gl_Position.x+=mod((mouse_position.x-time*speed)*size+instance_position.x*max_x_2,max_x_2)-max_x;
                 gl_Position.y+=mod(instance_position.y*2.4-mouse_position.y*size,2.4)-1.2;
                 gl_Position.z=(gl_Position.z-size*30.)/60.;
 
@@ -213,9 +270,8 @@
         gl.useProgram(shader_program);
 
 
-        //sets attributes and loads geometry
-        const geometry=new Float32Array(await (await fetch("geometry")).json());
-        for(let i=0;i<geometry.length;i++) geometry[i]/=10;
+        //sets attribute and uniform locations and loads geometry
+        const geometry=new Float32Array(await (await fetch("geometry")).json()).map(x=>x/10);
         const geometry_buffer=gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer);
         gl.bufferData(gl.ARRAY_BUFFER,geometry,gl.STATIC_DRAW);
@@ -230,22 +286,8 @@
         const instance_position_buffer=gl.createBuffer();
         const instance_position_attribute=gl.getAttribLocation(shader_program,"instance_position");
 
-        function make_attributes(){
-            const size=new Float32Array(instance_count);
-            for(let i=0;i<instance_count;i++) size[i]=Math.random()**size_exponent*0.985+0.015;
-            gl.bindBuffer(gl.ARRAY_BUFFER,size_buffer);
-            gl.bufferData(gl.ARRAY_BUFFER,size,gl.STATIC_DRAW);
-            
-            const rot=new Float32Array(instance_count*4);
-            for(let i=0;i<rot.length;i++) rot[i]=Math.random();
-            gl.bindBuffer(gl.ARRAY_BUFFER,rotation_buffer);
-            gl.bufferData(gl.ARRAY_BUFFER,rot,gl.STATIC_DRAW);
-
-            const inst_pos=new Float32Array(instance_count*2);
-            for(let i=0;i<inst_pos.length;i++) inst_pos[i]=Math.random();
-            gl.bindBuffer(gl.ARRAY_BUFFER,instance_position_buffer);
-            gl.bufferData(gl.ARRAY_BUFFER,inst_pos,gl.STATIC_DRAW);
-        }
+        const speed_buffer=gl.createBuffer();
+        const speed_attribute=gl.getAttribLocation(shader_program,"speed");
         
         gl.bindBuffer(gl.ARRAY_BUFFER,size_buffer);
         gl.vertexAttribPointer(size_attribute,1,gl.FLOAT,false,0,0);
@@ -256,6 +298,16 @@
         gl.bindBuffer(gl.ARRAY_BUFFER,instance_position_buffer);
         gl.vertexAttribPointer(instance_position_attribute,2,gl.FLOAT,false,0,0);
         gl.vertexAttribDivisor(instance_position_attribute,1);
+        gl.bindBuffer(gl.ARRAY_BUFFER,speed_buffer);
+        gl.vertexAttribPointer(speed_attribute,1,gl.FLOAT,false,0,0);
+        gl.vertexAttribDivisor(speed_attribute,1);
+
+
+        const uniforms={
+            aspect:gl.getUniformLocation(shader_program,"aspect"),
+            time:gl.getUniformLocation(shader_program,"time"),
+            mouse_position:gl.getUniformLocation(shader_program,"mouse_position"),
+        }
 
 
         //post pass one | original framebuffer at full resolution
@@ -388,12 +440,6 @@
 
 
         //rendering and interactivity
-        const uniforms={
-            aspect:gl.getUniformLocation(shader_program,"aspect"),
-            time:gl.getUniformLocation(shader_program,"time"),
-            mouse_position:gl.getUniformLocation(shader_program,"mouse_position"),
-        }
-
         let max_screen_size;
         onresize=()=>{
             canvas.width=window.innerWidth;
@@ -451,26 +497,39 @@
             then=now;
 
 
-            gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer,gl.STATIC_DRAW);
-            gl.useProgram(shader_program);
-            gl.vertexAttribPointer(position_attribute,3,gl.FLOAT,false,0,0);
-            gl.bindFramebuffer(gl.FRAMEBUFFER,post.enabled ? post.framebuffer : null);
-
             mouse.movement[0]*=Math.max(1-delta,0);
             mouse.movement[1]*=Math.max(1-delta,0);
             mouse.position[0]+=mouse.movement[0]*delta/max_screen_size*mouse.sensitivity;
             mouse.position[1]+=mouse.movement[1]*delta/max_screen_size*mouse.sensitivity;
 
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER,post.enabled ? post.framebuffer : null);
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+
+            gl.useProgram(points.program);
+            gl.bindBuffer(gl.ARRAY_BUFFER,points.data_buffer);
+            gl.vertexAttribPointer(points.data,4,gl.FLOAT,false,0,0);
+
+            gl.uniform1f(points.time,now/1000);
+            gl.uniform2fv(points.mouse_position,mouse.position);
+
+            gl.drawArrays(gl.POINTS,0,points.count);
+
+
+            gl.useProgram(shader_program);
+            gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer);
+            gl.vertexAttribPointer(position_attribute,3,gl.FLOAT,false,0,0);
+
             gl.uniform1f(uniforms.time,now/1000);
             gl.uniform2fv(uniforms.mouse_position,mouse.position);
 
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             gl.drawArraysInstanced(gl.TRIANGLES,0,geometry.length/3,instance_count);
 
 
             if(!post.enabled) return;
             
-            gl.bindBuffer(gl.ARRAY_BUFFER,post2.buffer,gl.STATIC_DRAW);
+            gl.bindBuffer(gl.ARRAY_BUFFER,post2.buffer);
             gl.vertexAttribPointer(post2.position,2,gl.FLOAT,false,0,0);
 
             
@@ -485,7 +544,8 @@
             gl.useProgram(post3.program);
             gl.bindFramebuffer(gl.FRAMEBUFFER,null);
             gl.bindTexture(gl.TEXTURE_2D,post2.texture);
-
+            
+            gl.clear(gl.DEPTH_BUFFER_BIT);
             gl.generateMipmap(gl.TEXTURE_2D);
             gl.drawArrays(gl.TRIANGLES,0,6);
         }
@@ -500,8 +560,7 @@
             bloom:document.getElementById("bloom"),
             count:document.getElementById("count"),
             sensitivity:document.getElementById("sensitivity"),
-            size_exponent:document.getElementById("size_exponent"),
-            reset:document.getElementById("reset"),
+            points_count:document.getElementById("points_count"),
         }
 
         ui.open_settings.addEventListener("click",()=>{
@@ -515,7 +574,30 @@
 
         ui.count.addEventListener("input",(e)=>{
             instance_count=e.target.value;
-            make_attributes();
+
+
+            //sets attributes
+            const size=new Float32Array(instance_count);
+            for(let i=0;i<instance_count;i++) size[i]=Math.random()*0.95+0.05;
+            gl.bindBuffer(gl.ARRAY_BUFFER,size_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,size,gl.STATIC_DRAW);
+            
+            const rot=new Float32Array(instance_count*4);
+            for(let i=0;i<rot.length;i++) rot[i]=Math.random();
+            gl.bindBuffer(gl.ARRAY_BUFFER,rotation_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,rot,gl.STATIC_DRAW);
+
+            const inst_pos=new Float32Array(instance_count*2);
+            for(let i=0;i<inst_pos.length;i++) inst_pos[i]=Math.random();
+            gl.bindBuffer(gl.ARRAY_BUFFER,instance_position_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,inst_pos,gl.STATIC_DRAW);
+
+            const speed=new Float32Array(instance_count);
+            for(let i=0;i<speed.length;i++) speed[i]=Math.random()*0.75+0.25;
+            gl.bindBuffer(gl.ARRAY_BUFFER,speed_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,speed,gl.STATIC_DRAW);
+
+
             e.target.previousElementSibling.textContent="Cubes: "+instance_count;
             localStorage.count=instance_count;
         });
@@ -526,16 +608,21 @@
             localStorage.sens=mouse.sensitivity;
         });
 
-        ui.size_exponent.addEventListener("input",(e)=>{
-            size_exponent=e.target.value;
-            make_attributes();
-            e.target.previousElementSibling.textContent="Size exponent: "+e.target.value;
-            localStorage.size_exponent=e.target.value;
-        });
+        ui.points_count.addEventListener("input",(e)=>{
+            points.count=e.target.value;
 
-        ui.reset.addEventListener("click",()=>{
-            localStorage.clear();
-            location.reload();
+            const data=new Float32Array(points.count*4);
+            for(let i=0;i<data.length;){
+                data[i++]=Math.random()*2-1;
+                data[i++]=Math.random()*2-1;
+                data[i++]=Math.random()*0.02;
+                data[i++]=Math.random()*0.75+0.25;
+            }
+            gl.bindBuffer(gl.ARRAY_BUFFER,points.data_buffer);
+            gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
+
+            e.target.previousElementSibling.textContent="Points: "+e.target.value;
+            localStorage.points_count=e.target.value;
         });
 
         ui.bloom.checked=Number(localStorage.bloom??post.enabled);
@@ -544,7 +631,7 @@
         ui.count.dispatchEvent(new Event("input"));
         ui.sensitivity.value=localStorage.sens??mouse.sensitivity;
         ui.sensitivity.dispatchEvent(new Event("input"));
-        ui.size_exponent.value=localStorage.size_exponent??size_exponent;
-        ui.size_exponent.dispatchEvent(new Event("input"));
+        ui.points_count.value=localStorage.points_count??points.count;
+        ui.points_count.dispatchEvent(new Event("input"));
     </script>
 </html>
