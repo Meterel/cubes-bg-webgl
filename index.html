@@ -63,27 +63,25 @@
             }
 
             #settings{
-                position: fixed;
-                top: 0px;
-                left: 0px;
-                right: 0px;
-                bottom: 0px;
-                padding-top: 50px;
-                padding-left: 50px;
-                padding-bottom: 70px;
-                overflow: auto;
-
                 background: rgba(0,0,0,0.2);
                 -webkit-backdrop-filter: blur(8px);
                 backdrop-filter: blur(8px);
             }
 
-            #settings>p{
+            #settings,#settings>:first-child{
+                position: fixed;
+                top: 0px;
+                left: 0px;
+                right: 0px;
+                bottom: 0px;
+            }
+
+            p{
                 margin-bottom: 0px;
             }
 
             input[type="range"]{
-                width: calc(100% - 50px);
+                width: 100%;
             }
         </style>
     </head>
@@ -92,29 +90,31 @@
         <canvas></canvas>
 
         <div id="settings" style="display: none;">
-            <p>Cubes</p>
-            <input type="range" id="count" min="0" max="1000" step="1">
+            <div style="padding: 50px;overflow: auto;">
+                <p>Cubes</p>
+                <input type="range" id="count" min="0" max="1000" step="1">
+    
+                <p>Points</p>
+                <input type="range" id="points_count" min="0" max="10000" step="1">
+    
+                <p>Sensitivity</p>
+                <input type="range" id="sensitivity" min="0" max="100" step="1">
+    
+                <br>
+    
+                <label for="bloom">Bloom</label>
+                <input type="checkbox" name="bloom" id="bloom">
+            </div>
 
-            <p>Points</p>
-            <input type="range" id="points_count" min="0" max="10000" step="1">
+            <a href="https://github.com/Meterel/cubes-bg-webgl" style="position: fixed;bottom: 8px;left: 8px;color: gray;"><small>Made by Meterel</small></a>
 
-            <p>Sensitivity</p>
-            <input type="range" id="sensitivity" min="0" max="100" step="1">
-
-            <br>
-
-            <label for="bloom">Bloom</label>
-            <input type="checkbox" name="bloom" id="bloom">
-
-            <div style="position: fixed;bottom: 30px;right: 30px;display: flex;gap: 8px;">
+            <div style="position: fixed;bottom: 20px;right: 20px;display: flex;gap: 8px;">
                 <button onclick="document.fullscreenElement ? document.exitFullscreen() : document.body.requestFullscreen()">Toggle fullscreen</button>
                 <button onclick="
                     localStorage.clear();
                     location.reload();
                 ">Reset</button>
             </div>
-
-            <a href="https://github.com/Meterel/cubes-bg-webgl" style="position: fixed;bottom: 8px;left: 8px;color: gray;"><small>Made by Meterel</small></a>
         </div>
 
         <button id="open_settings">Settings</button>
