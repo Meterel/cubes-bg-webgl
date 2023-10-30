@@ -158,13 +158,14 @@
 
             uniform float time;
             uniform vec2 mouse_position;
+            uniform vec2 resolution;
 
             void main(){
                 gl_PointSize=1.;
 
                 gl_Position=vec4(data.xy,0.,1.);
-                gl_Position.x=mod(gl_Position.x-(time*data.w-mouse_position.x)*data.z,2.)-1.;
-                gl_Position.y=mod(gl_Position.y-mouse_position.y*data.z,2.)-1.;
+                gl_Position.x=mod(gl_Position.x-(time*data.w-mouse_position.x)*data.z/resolution.x,2.)-1.;
+                gl_Position.y=mod(gl_Position.y-mouse_position.y*data.z/resolution.y,2.)-1.;
             }
         `);
         gl.compileShader(points.vshader);
@@ -194,6 +195,7 @@
         points.data=gl.getAttribLocation(points.program,"data");
         points.time=gl.getUniformLocation(points.program,"time");
         points.mouse_position=gl.getUniformLocation(points.program,"mouse_position");
+        points.resolution=gl.getUniformLocation(points.program,"resolution");
 
         //shaders for cubes
         const vertex_shader=gl.createShader(gl.VERTEX_SHADER);
@@ -446,6 +448,9 @@
             canvas.height=window.innerHeight;
             gl.viewport(0,0,canvas.width,canvas.height);
 
+            gl.useProgram(points.program);
+            gl.uniform2fv(points.resolution,[canvas.width/50,canvas.height/50]);
+
             gl.useProgram(shader_program);
             gl.uniform1f(uniforms.aspect,canvas.width/canvas.height);
 
@@ -607,7 +612,7 @@
             for(let i=0;i<data.length;){
                 data[i++]=Math.random()*2-1;
                 data[i++]=Math.random()*2-1;
-                data[i++]=Math.random()*0.02;
+                data[i++]=Math.random();
                 data[i++]=Math.random()*0.75+0.25;
             }
             gl.bindBuffer(gl.ARRAY_BUFFER,points.data_buffer);
