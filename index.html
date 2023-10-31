@@ -171,9 +171,9 @@
         gl.compileShader(points.vshader);
 
         gl.shaderSource(points.fshader,`
-            precision lowp float;
+            precision highp float;
 
-            uniform highp float time; //must be highp or error
+            uniform float time;
 
             vec3 hsv2rgb(vec3 c) {
                 vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
@@ -247,9 +247,9 @@
 
         const fragment_shader=gl.createShader(gl.FRAGMENT_SHADER);
         gl.shaderSource(fragment_shader,`
-            precision lowp float;
+            precision highp float;
 
-            uniform highp float time; //must be highp or error
+            uniform float time;
 
             varying float gradient;
 
