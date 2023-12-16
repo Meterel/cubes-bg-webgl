@@ -118,8 +118,6 @@
     </body>
 
     <script type="module">
-        "use strict";
-
         //initialization
         const canvas=document.querySelector("canvas");
         const gl=canvas.getContext("webgl2",{preserveDrawingBuffer:true});
@@ -363,7 +361,7 @@
                 vec2 uv=gl_FragCoord.xy/resolution;
                 float px=1./resolution.x;
 
-                for(float x=-3.;x<=3.;x++) gl_FragColor+=texture2D(txt,uv+vec2(x*px,0.))*(cos(x/4.*PI)+1.)/2.;
+                for(float x=-3.;x<=3.;++x) gl_FragColor+=texture2D(txt,uv+vec2(x*px,0.))*(cos(x/4.*PI)+1.)/2.;
                 gl_FragColor/=gl_FragColor.w;
             }
         `);
@@ -418,7 +416,7 @@
                 vec2 uv=gl_FragCoord.xy/resolution;
                 float px=50./resolution.y;
 
-                for(float y=-3.;y<=3.;y++) gl_FragColor+=texture2D(txt,uv+vec2(0.,y*px))*(cos(y/4.*PI)+1.)/2.;
+                for(float y=-3.;y<=3.;++y) gl_FragColor+=texture2D(txt,uv+vec2(0.,y*px))*(cos(y/4.*PI)+1.)/2.;
                 gl_FragColor/=gl_FragColor.w;
 
                 gl_FragColor+=texture2D(original_txt,uv);
@@ -581,9 +579,9 @@
             gl.bufferData(gl.ARRAY_BUFFER,new Float32Array(instance_count*4).map(Math.random),gl.STATIC_DRAW);
 
             const pos=new Float32Array(instance_count*2);
-            for(let i=0;i<pos.length;){
-                pos[i++]=Math.random();
-                pos[i++]=Math.random()*2.4;
+            for(let i=0;i<pos.length;++i){
+                pos[i]=Math.random();
+                pos[++i]=Math.random()*2.4;
             }
             gl.bindBuffer(gl.ARRAY_BUFFER,instance_position_buffer);
             gl.bufferData(gl.ARRAY_BUFFER,pos,gl.STATIC_DRAW);
@@ -600,11 +598,11 @@
             points.count=e.target.value;
 
             const data=new Float32Array(points.count*4);
-            for(let i=0;i<data.length;){
-                data[i++]=Math.random()*2-1;
-                data[i++]=Math.random()*2-1;
-                data[i++]=Math.random();
-                data[i++]=Math.random()*0.75+0.25;
+            for(let i=0;i<data.length;++i){
+                data[i]=Math.random()*2-1;
+                data[++i]=Math.random()*2-1;
+                data[++i]=Math.random();
+                data[++i]=Math.random()*0.75+0.25;
             }
             gl.bindBuffer(gl.ARRAY_BUFFER,points.data_buffer);
             gl.bufferData(gl.ARRAY_BUFFER,data,gl.STATIC_DRAW);
