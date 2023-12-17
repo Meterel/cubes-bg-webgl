@@ -158,9 +158,7 @@
             void main(){
                 gl_PointSize=1.;
 
-                gl_Position=vec4(data.xy,0.,1.);
-                gl_Position.x=mod(gl_Position.x-(time*data.w-mouse_position.x)*data.z/resolution.x,2.)-1.;
-                gl_Position.y=mod(gl_Position.y-mouse_position.y*data.z/resolution.y,2.)-1.;
+                gl_Position=vec4(mod(data.x-(time*data.w-mouse_position.x)*data.z/resolution.x,2.)-1.,mod(data.y-mouse_position.y*data.z/resolution.y,2.)-1.,0.,1.);
             }
         `);
         gl.compileShader(points.vshader);
@@ -393,19 +391,9 @@
 
         //post pass three | gaussian blur on y axis and add the original image
         const post3={
-            vshader:gl.createShader(gl.VERTEX_SHADER),
             fshader:gl.createShader(gl.FRAGMENT_SHADER),
             program:gl.createProgram(),
         }
-
-        gl.shaderSource(post3.vshader,`
-            attribute vec2 position;
-
-            void main(){
-                gl_Position=vec4(position,0.,1.);
-            }
-        `);
-        gl.compileShader(post3.vshader);
 
         gl.shaderSource(post3.fshader,`
             precision lowp float;
@@ -432,7 +420,7 @@
         `);
         gl.compileShader(post3.fshader);
 
-        gl.attachShader(post3.program,post3.vshader);
+        gl.attachShader(post3.program,post2.vshader);
         gl.attachShader(post3.program,post3.fshader);
         gl.linkProgram(post3.program);
         gl.useProgram(post3.program);
@@ -458,13 +446,13 @@
             gl.uniform1f(uniforms.aspect,canvas.width/canvas.height);
 
             gl.bindTexture(gl.TEXTURE_2D,post.texture);
-            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,canvas.width,canvas.height,0,gl.RGB,gl.UNSIGNED_BYTE,null);
 
             gl.useProgram(post2.program);
             gl.uniform2fv(post2.resolution,[canvas.width/50,canvas.height/50]);
             gl.bindTexture(gl.TEXTURE_2D,post2.texture);
-            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width/50,canvas.height/50,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
-            
+            gl.texImage2D(gl.TEXTURE_2D,0,gl.RGB,canvas.width/50,canvas.height/50,0,gl.RGB,gl.UNSIGNED_BYTE,null);
+
             gl.useProgram(post3.program);
             gl.uniform2fv(post3.resolution,[canvas.width,canvas.height]);
 
