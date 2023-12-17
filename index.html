@@ -363,9 +363,9 @@
                 //gl_FragColor/=gl_FragColor.w;
 
                 gl_FragColor=
-                    (texture2D(txt,uv+vec2(-3.*px,0.))+texture2D(txt,uv+vec2(3.*px,0.)))*0.03661165235168157+
-                    (texture2D(txt,uv+vec2(-2.*px,0.))+texture2D(txt,uv+vec2(2.*px,0.)))*0.125+
-                    (texture2D(txt,uv+vec2(-px,0.))+texture2D(txt,uv+vec2(px,0.)))*0.21338834764831843+
+                    (texture2D(txt,uv-vec2(3.*px,0.))+texture2D(txt,uv+vec2(3.*px,0.)))*0.03661165235168157+
+                    (texture2D(txt,uv-vec2(2.*px,0.))+texture2D(txt,uv+vec2(2.*px,0.)))*0.125+
+                    (texture2D(txt,uv-vec2(px,0.))+texture2D(txt,uv+vec2(px,0.)))*0.21338834764831843+
                     texture2D(txt,uv)*0.25;
             }
         `);
@@ -422,9 +422,9 @@
                 //gl_FragColor/=gl_FragColor.w;
 
                 gl_FragColor=
-                    (texture2D(txt,uv+vec2(0.,-3.*px))+texture2D(txt,uv+vec2(0.,3.*px)))*0.03661165235168157+
-                    (texture2D(txt,uv+vec2(0.,-2.*px))+texture2D(txt,uv+vec2(0.,2.*px)))*0.125+
-                    (texture2D(txt,uv+vec2(0.,-px))+texture2D(txt,uv+vec2(0.,px)))*0.21338834764831843+
+                    (texture2D(txt,uv-vec2(0.,3.*px))+texture2D(txt,uv+vec2(0.,3.*px)))*0.03661165235168157+
+                    (texture2D(txt,uv-vec2(0.,2.*px))+texture2D(txt,uv+vec2(0.,2.*px)))*0.125+
+                    (texture2D(txt,uv-vec2(0.,px))+texture2D(txt,uv+vec2(0.,px)))*0.21338834764831843+
                     texture2D(txt,uv)*0.25+
 
                     texture2D(original_txt,uv);
