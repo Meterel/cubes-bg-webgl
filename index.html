@@ -266,7 +266,7 @@
 
 
         //sets attribute and uniform locations and loads geometry
-        const geometry=new Float32Array(await (await fetch("geometry")).json()).map(x=>x/10);
+        const geometry=new Float32Array(await (await fetch("geometry")).arrayBuffer()).map(x=>x/10);
         const geometry_buffer=gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER,geometry_buffer);
         gl.bufferData(gl.ARRAY_BUFFER,geometry,gl.STATIC_DRAW);
