@@ -114,7 +114,7 @@
 
     <script type="module">
         //initialization
-        const gl=canvas.getContext("webgl2",{preserveDrawingBuffer:true});
+        const gl=canvas.getContext("webgl2",{preserveDrawingBuffer:true,desynchronized:true,powerPreference:"high-performance"});
 
         gl.clearColor(0,0,0,1);
         gl.enable(gl.DEPTH_TEST);
@@ -482,7 +482,7 @@
         function process(now){
             requestAnimationFrame(process);
             now/=1000;
-            if(then===now) return;
+            if(then===now) return; //this can happen on firefox with resistFingerprinting enabled
             const delta=now-then;
             then=now;
 
